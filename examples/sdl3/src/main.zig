@@ -83,7 +83,8 @@ pub fn main() !void {
 
     try rml.debugger.initialise(context);
 
-    // Example of data binding setup, derived from the tutorial here: https://mikke89.github.io/RmlUiDoc/pages/data_bindings/examples.html
+    // Example of data binding setup, based on the tutorial here:
+    // https://mikke89.github.io/RmlUiDoc/pages/data_bindings/examples.html
     const MyData = struct {
         // FixedString is a Zig-API provided type with a fixed capacity
         title: rml.FixedString(256) = .initComptime("Hello World!"),

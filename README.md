@@ -2,9 +2,40 @@
 
 ⚠️ *This project is in its early days. Data binding still needs additional work for structs and array types, and the API is subject to change*
 
-![Continuous integration](https://github.com/silbinarywolf/zig-rmlui/actions/workflows/ci.yml/badge.svg)
+A library that contains Zig bindings for [RmlUi](https://github.com/mikke89/RmlUi), C++ user interface library based on the HTML and CSS standards.
 
-Zig RmlUi is a library that contains Zig bindings for the C++ library [RmlUi](https://github.com/mikke89/RmlUi) which based on the HTML and CSS standards
+## Installation
+
+Option A. Install with package manager
+```sh
+zig fetch --save https://github.com/silbinarywolf/rmlui/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz"
+```
+
+Option B. Copy-paste the dependency into your project directly and put in a `third-party` folder. This is recommended if you want to easily hack on it or tweak it.
+```zig
+.{
+    .name = .yourzigproject,
+    .dependencies = .{
+        .android = .{
+            .path = "third-party/rmlui",
+        },
+    },
+}
+```
+
+## Examples
+
+* [SDL3](examples/sdl3): An example of how to get setup with SDL3 and how bindings work
+
+## How does this Zig library work?
+
+I've handwritten a [C-API wrapper](crmlui/crmlui.cpp) that call out to the C++ code, similar to how [cimgui](https://github.com/cimgui/cimgui) works with [ImGui](github.com/ocornut/imgui).
+
+However because the binding logic for RmlUi relies on C++ templating (generics), I've had to spend some time understanding how those types are registered with RmlUi and then write specific Zig code that works similarly, such as generating a type id dynamically once when a value is bound [here](src/FamilyId.zig).
+
+## Initialization and Loop
+
+An example of what the setup and application loop looks like when consuming this library, based on the provided [SDL3 example](examples/sdl3).
 
 ```zig
 // This is an overly simplified example to give you the gist
@@ -23,7 +54,8 @@ pub fn main() !void {
     const context = try rml.createContext("main", 1280, 720, .default);
     try rml.debugger.initialise(context);
 
-    // Example of data binding setup, derived from the tutorial here: https://mikke89.github.io/RmlUiDoc/pages/data_bindings/examples.html
+    // Example of data binding setup, based on the tutorial here:
+    // https://mikke89.github.io/RmlUiDoc/pages/data_bindings/examples.html
     const MyData = struct {
         // FixedString is a Zig-API provided type with a fixed capacity, for two-way binding
         title: rml.FixedString(256) = .initComptime("Hello World!"),
@@ -78,35 +110,6 @@ pub fn main() !void {
     }
 }
 ```
-
-## Installation
-
-Option A. Install with package manager
-```sh
-zig fetch --save https://github.com/silbinarywolf/rmlui/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz"
-```
-
-Option B. Copy-paste the dependency into your project directly and put in a `third-party` folder. This is recommended if you want to easily hack on it or tweak it.
-```zig
-.{
-    .name = .yourzigproject,
-    .dependencies = .{
-        .android = .{
-            .path = "third-party/rmlui",
-        },
-    },
-}
-```
-
-## Examples
-
-* [SDL3](examples/sdl3): An example of how to get setup with SDL3 and small examples of using bindings.
-
-## How does this Zig library work?
-
-I've handwritten a [C-API wrapper](crmlui/crmlui.cpp) that call out to the C++ code, similar to how [cimgui](https://github.com/cimgui/cimgui) works with [ImGui](github.com/ocornut/imgui).
-
-However because the binding logic for RmlUi relies on C++ templating (generics), I've had to spend some time understanding how those types are registered with RmlUi and then write specific Zig code that works similarly, such as generating a type id dynamically once when a value is bound [here](src/FamilyId.zig).
 
 ## Credits
 
