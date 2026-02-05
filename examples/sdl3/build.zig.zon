@@ -1,0 +1,22 @@
+.{
+    .name = .rmlui_sdl3_example,
+    .version = "0.0.0",
+    .fingerprint = 0x7d0d6703b61aadd8,
+    .dependencies = .{
+        .rmlui = .{
+            .path = "../..",
+        },
+        .freetype = .{
+            .path = "../deps/freetype",
+        },
+        .sdl = .{
+            .url = "git+https://github.com/castholm/SDL.git#887fa805e40d5c7bb3955ae69b89ed566c6a0471",
+            .hash = "sdl-0.4.0+3.4.0-SDL--rq2owEZsySGuHCuVJ9naEvH3i3e_pyUIjziBtJ-",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

@@ -1,0 +1,17 @@
+.{
+    .name = .freetype,
+    .version = "2.14.1",
+    .dependencies = .{
+        .freetype = .{
+            .url = "https://github.com/freetype/freetype/archive/refs/tags/VER-2-14-1.zip",
+            .hash = "N-V-__8AAJx1qgDwI7KTM6yDZ4ArrZU6qmKKuvDHRVrxUkTw",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "include",
+    },
+    .fingerprint = 0xac2059b6842352e3,
+}

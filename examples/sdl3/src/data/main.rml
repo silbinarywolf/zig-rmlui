@@ -1,0 +1,23 @@
+<rml>
+<head>
+	<link type="text/css" href="main.rcss"/>
+	<title>Window</title>
+</head>
+<body class="app">
+	<main class="app__main">
+		<article class="container copy post">
+			<h1>Simple data binding example</h1>
+			<div data-model="my_model">
+				<h2>{{title}}</h2>
+				<p data-if="show_text">The quick brown fox jumps over the lazy {{animal}}.</p>
+				<p>ALSO: {{readonly_text}}.</p>
+				<input type="text" data-value="animal"/>
+			</div>
+			<p>
+				Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla dictum mollis suscipit. Sed porta, felis at cursus lobortis, nisl mauris suscipit turpis, a accumsan mauris ex eget eros. Interdum et malesuada fames ac ante ipsum primis in faucibus. Vivamus sagittis ut ex id vulputate. Fusce sagittis nunc et elit ultricies aliquet. Nullam vitae nunc sed odio lobortis lobortis. Etiam mattis faucibus felis at vestibulum. Suspendisse vel massa sit amet elit condimentum rhoncus in quis nulla. Nam vel dolor a dui lobortis vehicula. Proin quis odio arcu. Donec id volutpat diam. Sed dictum efficitur est, id placerat eros commodo a. Integer aliquam, arcu ac placerat pretium, massa arcu maximus erat, sed auctor turpis sapien dapibus dolor. Sed commodo ipsum elementum arcu pharetra, ut imperdiet leo rutrum. Pellentesque consequat tempor dolor sit amet euismod. 
+			</p>
+		
+		</article>
+	</main>
+</body>
+</rml>
