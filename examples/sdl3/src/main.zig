@@ -148,8 +148,8 @@ pub fn main() !void {
                 my_data.title = try .format("Hello {s}!", .{my_data.animal.string()});
                 my_model.dirtyVariable("title");
 
-                my_data.other_text = "the cats meowing has ceased...";
-                my_model.dirtyVariable("other_text");
+                my_data.readonly_text = "the cats meowing has ceased...";
+                my_model.dirtyVariable("readonly_text");
             }
 
             // Update RmlUi context
