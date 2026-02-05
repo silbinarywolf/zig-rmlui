@@ -1,0 +1,28 @@
+# This file exists so that RmlUi can easily be vendored instead of retrieved externally
+
+/rmlui/*
+/rmlui/.github/workflows
+
+# RmlUi - Keep CMake build options
+!/rmlui/CMake
+!/rmlui/CMakePresets.json
+!/rmlui/CMakePresets.json
+!/rmlui/CMakeLists.txt
+!/rmlui/changelog.md
+
+# RmlUi - Keep core code
+!/rmlui/Include
+!/rmlui/Source
+!/rmlui/LICENSE.txt
+
+# RmlUi - Keep SDL backends
+!/rmlui/Backends
+/rmlui/Backends/*
+!/rmlui/Backends/CMakeLists.txt
+!/rmlui/Backends/RmlUi_Backend.h
+!/rmlui/Backends/RmlUi_Platform_SDL*
+!/rmlui/Backends/RmlUi_Renderer_SDL*
+!/rmlui/Backends/RmlUi_Backend_SDL_SDLrenderer*
+!/rmlui/Backends/RmlUi_Backend_SDL_GPU*
+!/rmlui/Backends/RmlUi_SDL_GPU
+# !/rmlui/Backends/RmlUi_Vulkan

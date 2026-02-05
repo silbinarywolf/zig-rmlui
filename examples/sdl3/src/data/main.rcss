@@ -1,0 +1,58 @@
+/* Rml has no default user-agent styles, so defining *some* of them here */
+div, p, h1, header, main, article { display: block; }
+select { text-align: left; }
+em { font-style: italic; }
+strong { font-weight: bold; }
+
+/* Scrollbar is an element in the DOM and needs an explicit width */
+scrollbarvertical {
+	width: 18px;
+	border-radius: 8px;
+}
+
+slidertrack {
+	background-color: black;
+	opacity: 0.1;
+}
+
+sliderbar {
+	background-color: grey;
+	border-radius: 8px;
+}
+
+/* Our styling */
+* {
+	box-sizing: border-box;
+}
+
+html, body {
+	font-family: Lato;
+	font-weight: normal;
+	font-size: 22px;
+}
+
+body {
+	width: 100%;
+	height: 100%;
+	overflow: auto;
+	background-color: white;
+	color: black;
+}
+
+.app__main {
+	padding: 0 1rem;
+}
+
+.copy h1 {
+	font-size: 2em;
+	margin: 1rem 0;
+}
+
+.copy p {
+	line-height: 1.4625em;
+	margin: 1rem 0;
+}
+
+input {
+	border: 1px black;
+}
