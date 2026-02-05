@@ -16,7 +16,7 @@ Option B. Copy-paste the dependency into your project directly and put in a `thi
 .{
     .name = .yourzigproject,
     .dependencies = .{
-        .android = .{
+        .rmlui = .{
             .path = "third-party/rmlui",
         },
     },
