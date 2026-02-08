@@ -67,6 +67,18 @@
 #define CRMLUI_API EXTERN API
 #define CONST const
 
+#ifndef CRMLUI_HAS_CORE
+#define CRMLUI_HAS_CORE 1
+#endif
+
+#ifndef CRMLUI_HAS_DEBUGGER
+#define CRMLUI_HAS_DEBUGGER 0
+#endif
+
+#ifndef CRMLUI_HAS_SDL_BACKEND
+#define CRMLUI_HAS_SDL_BACKEND 0
+#endif
+
 #ifdef CRMLUI_DEFINE_ENUMS_AND_STRUCTS
 typedef struct RmlSystemInterface RmlSystemInterface;
 typedef struct RmlRenderInterface RmlRenderInterface;
@@ -80,6 +92,7 @@ typedef struct RmlDataTypeRegister RmlDataTypeRegister;
 typedef struct RmlDataModel RmlDataModel;
 typedef struct RmlVariableDefinition RmlVariableDefinition;
 typedef struct RmlString RmlString;
+typedef struct RmlStructDefinition RmlStructDefinition;
 struct RmlSystemInterface;
 struct RmlRenderInterface;
 struct RmlContext;
@@ -94,6 +107,7 @@ struct RmlDataModel;
 struct RmlVariableDefinition;
 typedef int RmlFamilyId;
 struct RmlString;
+struct RmlStructDefinition;
 #else
 typedef Rml::SystemInterface RmlSystemInterface;
 typedef Rml::RenderInterface RmlRenderInterface;
@@ -110,6 +124,7 @@ typedef Rml::DataModel RmlDataModel;
 typedef Rml::VariableDefinition RmlVariableDefinition;
 typedef Rml::FamilyId RmlFamilyId;
 typedef Rml::String RmlString;
+typedef Rml::StructDefinition RmlStructDefinition;
 #endif
 
 /// Comment from RmlUi: Type of data stored in the variant. We use size_t as base to avoid 'padding due to alignment specifier' warning.
@@ -188,6 +203,17 @@ typedef struct RmlDataModelHandle {
 CRMLUI_COMPILE_TIME_ASSERT(RmlDataModelHandle_struct_size, sizeof(Rml::DataModelHandle) == sizeof(RmlDataModelHandle));
 CRMLUI_COMPILE_TIME_ASSERT_OFFSETOF_MATCH(model, Rml::DataModelHandle, RmlDataModelHandle_Private);
 
+typedef struct RmlStructHandle_Private {
+    RmlDataTypeRegister* type_register;
+	RmlStructDefinition* struct_definition;
+} RmlStructHandle_Private;
+typedef struct RmlStructHandle {
+    RmlStructHandle_Private private_fields;
+} RmlStructHandle;
+CRMLUI_COMPILE_TIME_ASSERT(RmlStructHandle_struct_size, sizeof(Rml::StructHandle<RmlDataModelConstructor>) == sizeof(RmlStructHandle));
+CRMLUI_COMPILE_TIME_ASSERT_OFFSETOF_MATCH(type_register, Rml::StructHandle<RmlDataModelConstructor>, RmlStructHandle_Private);
+CRMLUI_COMPILE_TIME_ASSERT_OFFSETOF_MATCH(struct_definition, Rml::StructHandle<RmlDataModelConstructor>, RmlStructHandle_Private);
+
 typedef enum {
 	RmlModalFlag_None,  // Remove modal state.
 	RmlModalFlag_Modal, // Set modal state, other documents cannot receive focus.
@@ -232,10 +258,7 @@ typedef struct CRmlFixedStringShape {
 	char buf_start[1]; /* [capacity]buf */
 } CRmlFixedStringShape;
 
-// CRMLUI_API bool rmluiBackendInitialize(const char* window_name, int width, int height, bool allow_resize);
-
-// TODO: Implement enough API surface to deal with
-// https://github.com/mikke89/RmlUi/blob/master/Samples/tutorial/template/src/main.cpp
+#if CRMLUI_HAS_CORE
 
 /// Sets the interface through which all system requests are made. This is not required to be called, but if it is, it
 /// must be called before Initialise().
@@ -266,6 +289,15 @@ CRMLUI_API void rmlShutdown(void);
 /// @lifetime The interface must be kept alive until after the call to Rml::Shutdown.
 CRMLUI_API void rmlSetFileInterface(RmlFileInterface* file_interface);
 
+/// Fetches a context by index.
+/// @param[in] index The index of the desired context. If this is outside the valid range of contexts, it will be clamped.
+/// @return The requested context, or nullptr if no contexts exist.
+CRMLUI_API RmlContext* rmlGetContext(int index);
+
+/// Returns the number of active contexts.
+/// @return The total number of active RmlUi contexts.
+CRMLUI_API int rmlGetNumContexts();
+
 /// Creates a new element context.
 /// @param[in] name_ptr The new name of the context. This must be unique.
 /// @param[in] name_len The length of the name ptr given.
@@ -279,16 +311,17 @@ CRMLUI_API void rmlSetFileInterface(RmlFileInterface* file_interface);
 /// @return A non-owning pointer to the new context, or nullptr if the context could not be created.
 CRMLUI_API RmlContext* rmlCreateContext(CRMLUI_IN_BYTECAP(name_len) const char* name_ptr, unsigned int name_len, int width, int height, RmlRenderInterface* render_interface /* = nullptr*/, RmlTextInputHandler* text_input_handler/* = nullptr */);
 
-/// Initialises the debug plugin. The debugger will be loaded into the given context.
-/// @param[in] host_context RmlUi context to load the debugger into. The debugging tools will be displayed on this context. If this context is
-///     destroyed, the debugger will be released.
-/// @return True if the debugger was successfully initialised
-CRMLUI_API bool rmlDebuggerInitialise(RmlContext* context);
-
-CRMLUI_API void rmlDebuggerSetVisible(bool is_visible);
-CRMLUI_API bool rmlDebuggerIsVisible();
+// Removes and destroys a context.
+// @param[in] name The name of the context to remove.
+// @return True if name is a valid context, false otherwise.
+CRMLUI_API bool rmlRemoveContext(const char* name_ptr, unsigned int name_len);
 
 /// Load a document into the context.
+///
+/// @return The loaded document, or nullptr if no document was loaded.
+CRMLUI_API RmlElementDocument* rmlContext_LoadDocument(RmlContext* context, const char* filename_ptr, unsigned int filename_len);
+
+/// Load a document into the context from memory.
 ///
 /// @return The loaded document, or nullptr if no document was loaded.
 CRMLUI_API RmlElementDocument* rmlContext_LoadDocumentFromMemory(RmlContext* context, const char* rml_data_ptr, size_t rml_data_len, const char* filename_ptr, unsigned int filename_len);
@@ -296,6 +329,8 @@ CRMLUI_API RmlElementDocument* rmlContext_LoadDocumentFromMemory(RmlContext* con
 /// Updates all elements in the context's documents.
 /// This must be called before Context::Render, but after any elements have been changed, added, or removed.
 CRMLUI_API bool rmlContext_Update(RmlContext* context);
+
+CRMLUI_API const char* rmlContext_GetName(RmlContext* context);
 
 /// Changes the ratio of the 'dp' unit to the 'px' unit.
 /// @param[in] dp_ratio The new density-independent pixel ratio of the context.
@@ -336,6 +371,13 @@ CRMLUI_API bool rmlContext_Render(RmlContext* context);
 /// @return A constructor for the data model, or empty if it could not be created.
 CRMLUI_API void rmlContext_CreateDataModel(RmlContext* context, const char* name_ptr, size_t name_len, RmlDataTypeRegister* data_type_register /* = null*/, RmlDataModelConstructor* data_model_constructor_result);
 
+/// Get the max delay until Update() and Render() should get called again. An application can choose to only call
+/// update and render once the time has elapsed, but there's no harm in doing so more often. The returned value can
+/// be infinity, in which case Update() should be invoked after user input was received. A value of 0 means "render
+/// as fast as possible", for example if an animation is playing.
+/// @return Time until the next update is expected.
+CRMLUI_API double rmlContext_GetNextUpdateDelay(const RmlContext* context);
+
 /// Show the document.
 ///
 /// @param[in] document this parameter 
@@ -347,6 +389,16 @@ CRMLUI_API void rmlElementDocument_Show(RmlElementDocument* document, RmlModalFl
 /// Styles will be reloaded from <style> tags and external style sheets, but not inline 'style' attributes.
 /// @note The source url originally used to load the document must still be a valid RML document.
 CRMLUI_API void rmlElementDocument_ReloadStyleSheet(RmlElementDocument* document);
+
+/// Adds a new font face to the font engine. The face's family, style, and weight will be determined from the face itself.
+/// @param[in] file_path The path to the file to load the face from. The path is passed directly to the file interface which is used to load the file.
+/// The default file interface accepts both absolute paths and paths relative to the working directory.
+/// @param[in] fallback_face True to use this font face for unknown characters in other font faces.
+/// @param[in] weight The weight to load when the font face contains multiple weights, otherwise the weight to register the font as. By default, it
+/// loads all found font weights.
+/// @param[in] face_index The index of the font face within a font collection.
+/// @return True if the face was loaded successfully, false otherwise.
+CRMLUI_API bool rmlLoadFontFace(const char* file_path_ptr, size_t file_path_len, RmlFontWeight weight /* = Style::FontWeight::Auto*/, bool fallback_face /* = false */, int face_index /*= 0*/);
 
 /// Adds a new font face from memory to the font engine. The face's family, style, and weight are given by the parameters.
 /// @param[in] data The font data.
@@ -397,11 +449,8 @@ CRMLUI_API RmlVariableDefinition* rmlDataTypeRegister_GetDefinitionById(RmlDataT
  */
 
 CRMLUI_API RmlVariableDefinition* rmlScalarDefinition_create(RmlVariantType variant_type);
-CRMLUI_API RmlVariableDefinition* rmlStringScalarDefinition_create(void);
 CRMLUI_API RmlVariableDefinition* rmlFixedStringScalarDefinition_create(void);
-
-/** Assumes a struct with a ptr and size_t length */
-CRMLUI_API RmlVariableDefinition* rmlConstStringPtrLen_Definition_create(uint8_t data_offset, uint8_t len_offset);
+CRMLUI_API RmlVariableDefinition* rmlConstStringPtrLen_Definition_create(uint8_t data_offset, uint8_t len_offset); /** Assumes a struct with a ptr and size_t length */
 
 /**
  * File System Interface
@@ -423,11 +472,28 @@ struct RmlFileInterfaceVTable {
 
 CRMLUI_API RmlFileInterface* rmlFileInterface_new(const RmlFileInterfaceVTable* file_interface);
 
+#endif
+
+/**
+ * Debugger
+ */
+#if CRMLUI_HAS_DEBUGGER
+
+/// Initialises the debug plugin. The debugger will be loaded into the given context.
+/// @param[in] host_context RmlUi context to load the debugger into. The debugging tools will be displayed on this context. If this context is
+///     destroyed, the debugger will be released.
+/// @return True if the debugger was successfully initialised
+CRMLUI_API bool rmlDebuggerInitialise(RmlContext* context);
+CRMLUI_API void rmlDebuggerSetVisible(bool is_visible);
+CRMLUI_API bool rmlDebuggerIsVisible(void);
+
+#endif
+
 /**
  * SDL Platform and Renderer
  */
 
-#if defined(CRMLUI_DEFINE_ENUMS_AND_STRUCTS) && defined(CRMLUI_HAS_SDL_BACKEND)
+#if defined(CRMLUI_DEFINE_ENUMS_AND_STRUCTS) && CRMLUI_HAS_SDL_BACKEND
 typedef struct SystemInterface_SDL SystemInterface_SDL;
 typedef struct RenderInterface_SDL RenderInterface_SDL;
 struct SystemInterface_SDL;
@@ -444,7 +510,7 @@ struct SDL_Event;
 
 #endif
 
-#ifdef CRMLUI_HAS_SDL_BACKEND
+#if CRMLUI_HAS_SDL_BACKEND
 CRMLUI_API SystemInterface_SDL* rmlSystemInterface_SDL_new(void);
 CRMLUI_API void rmlSystemInterface_SDL_SetWindow(SystemInterface_SDL* system_interface, SDL_Window* window);
 CRMLUI_API void rmlSystemInterface_SDL_free(SystemInterface_SDL* system_interface);

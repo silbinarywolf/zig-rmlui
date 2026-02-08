@@ -1,3 +1,5 @@
+//! ZigFileInterface is a FileInterface implementation for RmlUi
+
 const std = @import("std");
 const builtin = @import("builtin");
 const Dir = std.fs.Dir;
@@ -9,7 +11,7 @@ const VirtualFS = @import("VirtualFS.zig");
 
 const log = std.log.scoped(.FileInterface);
 
-root_directory: Dir,
+root_directory: ?Dir,
 impl: *crml.RmlFileInterface,
 embedded_files: []const EmbedFile,
 fs: VirtualFS,
@@ -35,12 +37,7 @@ pub fn init(self: *ZigFileInterface, allocator: std.mem.Allocator, options: Opti
         .tell = fileTell,
     }) orelse return error.OutOfMemory;
     self.* = .{
-        .root_directory = if (options.root_directory) |r|
-            r
-        else if (builtin.os.tag == .freestanding)
-            .{ .fd = -2 }
-        else
-            std.fs.cwd(),
+        .root_directory = null,
         .impl = impl,
         .embedded_files = options.embedded_files,
         .fs = .empty,
@@ -71,7 +68,13 @@ fn fileOpen(path_ptr: [*c]const u8, path_len: c_uint, userdata: ?*anyopaque) cal
         log.err("no file found '{s}'", .{path});
         return 0;
     }
-    const f = self.root_directory.openFile(path, .{}) catch |err| {
+    const root_directory = if (self.root_directory) |r|
+        r
+    else if (builtin.os.tag == .freestanding)
+        .{ .fd = -2 }
+    else
+        std.fs.cwd();
+    const f = root_directory.openFile(path, .{}) catch |err| {
         log.err("error '{s}' when opening file '{s}'", .{ @errorName(err), path });
         return 0;
     };
@@ -116,3 +119,9 @@ fn fileTell(file: crml.RmlFileHandle, userdata: ?*anyopaque) callconv(.c) usize 
 }
 
 const ZigFileInterface = @This();
+
+const testing = @import("std").testing;
+
+test {
+    testing.refAllDecls(ZigFileInterface);
+}
