@@ -58,6 +58,9 @@ pub fn main() !void {
 
     try rmldebug.initialise(context);
 
+    const lato_font_family_name = "Lato";
+    try rml.loadFontFaceFromMemory(@embedFile("data/Lato-Regular.ttf"), lato_font_family_name, .{});
+
     // Example of data binding setup, based on the tutorial here:
     // https://mikke89.github.io/RmlUiDoc/pages/data_bindings/examples.html
     const MyData = struct {
