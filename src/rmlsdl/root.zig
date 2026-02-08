@@ -1,16 +1,18 @@
 //! SDL interface code
 
-const rmlui = @import("root.zig");
+const rml = @import("rml");
 const crml = @import("crml");
 
-const Context = rmlui.Context;
-const Error = rmlui.Error;
+const Context = rml.Context;
+const Error = rml.Error;
 
 const SdlWindow = crml.SDL_Window;
 const SdlEvent = crml.SDL_Event;
 const SdlRenderer = crml.SDL_Renderer;
 
-/// If RmlUi consumed the event then return false
+/// This should be called within the SDL_PollEvent loop.
+///
+/// If RmlUi consumed the event then return false / continue the loop and stop processing.
 pub fn inputEventHandler(context: *Context, window: *SdlWindow, event: *SdlEvent) bool {
     return crml.rmlInputEventHandler_SDL(context.c(), @ptrCast(window), @ptrCast(event));
 }
@@ -29,7 +31,7 @@ pub const SystemInterface = opaque {
         return crml.rmlSystemInterface_SDL_SetWindow(system_interface.c(), window);
     }
 
-    pub inline fn interface(system_interface: *SystemInterface) *rmlui.SystemInterface {
+    pub inline fn interface(system_interface: *SystemInterface) *rml.SystemInterface {
         return @ptrCast(system_interface);
     }
 
@@ -59,7 +61,7 @@ pub const RenderInterface = opaque {
     }
 
     /// cast to base RenderInterface
-    pub inline fn interface(render_interface: *RenderInterface) *rmlui.RenderInterface {
+    pub inline fn interface(render_interface: *RenderInterface) *rml.RenderInterface {
         return @ptrCast(render_interface);
     }
 
@@ -68,3 +70,9 @@ pub const RenderInterface = opaque {
         return @ptrCast(render_interface);
     }
 };
+
+const testing = @import("std").testing;
+
+test {
+    testing.refAllDecls(@This());
+}

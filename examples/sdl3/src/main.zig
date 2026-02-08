@@ -1,11 +1,13 @@
 const std = @import("std");
 const rml = @import("rml");
+const rmldebug = @import("rmldebug");
+const rmlsdl = @import("rmlsdl");
 const log = std.log;
 const sdl = @import("sdl");
 
 const RmlAppState = struct {
-    render_interface: *rml.sdl.RenderInterface,
-    system_interface: *rml.sdl.SystemInterface,
+    system_interface: *rmlsdl.SystemInterface,
+    render_interface: *rmlsdl.RenderInterface,
     file_interface: rml.ZigFileInterface,
     context: *rml.Context,
 };
@@ -13,7 +15,7 @@ const RmlAppState = struct {
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_EVENTS | sdl.SDL_INIT_GAMEPAD)) {
+    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_GAMEPAD)) {
         log.err("unable to initialize SDL: {s}", .{sdl.SDL_GetError()});
         return error.SdlError;
     }
@@ -33,55 +35,78 @@ pub fn main() !void {
     defer sdl.SDL_DestroyWindow(window);
     defer sdl.SDL_DestroyRenderer(renderer);
 
-    // Setup RML interfaces to handle
-    // - Rendering
-    // - System
-    // - File System (ie. loading *.rcss files)
-    const system_interface = try rml.sdl.SystemInterface.create();
-    system_interface.setWindow(@ptrCast(window));
-    defer system_interface.destroy();
-    rml.setSystemInterface(system_interface.interface());
-    const render_interface = try rml.sdl.RenderInterface.create(@ptrCast(renderer));
-    defer render_interface.destroy();
-    rml.setRenderInterface(render_interface.interface());
-    var file_interface: rml.ZigFileInterface = undefined;
-    try file_interface.init(allocator, .{
-        // .root_directory = try std.fs.cwd().openDir("src", .{}),
-        .embedded_files = &.{
-            .{ .path = "data/main.rcss", .data = @embedFile("data/main.rcss") },
-            .{ .path = "data/main.rml", .data = @embedFile("data/main.rml") },
-        },
-    });
-    defer file_interface.deinit(allocator);
-    rml.setFileInterface(file_interface.interface());
+    // Set window to be resizeable so users can see how text flow automatically fits to the window
+    _ = sdl.SDL_SetWindowResizable(window, true);
 
-    // Setup RML
-    try rml.initialise();
-    defer rml.shutdown();
+    const rmlui_template_name = "data/main.rml";
+    var rmlui: RmlAppState = rmluiblk: {
+        // Setup RML interfaces to handle
+        // - Rendering
+        // - System
+        // - File System (ie. loading *.rcss files)
+        const system_interface = try rmlsdl.SystemInterface.create();
+        system_interface.setWindow(@ptrCast(window));
+        errdefer system_interface.destroy();
+        rml.setSystemInterface(system_interface.interface());
+        const render_interface = try rmlsdl.RenderInterface.create(@ptrCast(renderer));
+        errdefer render_interface.destroy();
+        rml.setRenderInterface(render_interface.interface());
+        var file_interface: rml.ZigFileInterface = undefined;
+        try file_interface.init(allocator, .{
+            // NOTE: Can set a specific directory to load RmlUi assets from, otherwise defaults to current working directory
+            // .root_directory = try std.fs.cwd().openDir("src", .{}),
+            .embedded_files = &.{
+                .{ .path = "data/main.rcss", .data = @embedFile("data/main.rcss") },
+                .{ .path = rmlui_template_name, .data = @embedFile(rmlui_template_name) },
+            },
+        });
+        errdefer file_interface.deinit(allocator);
+        rml.setFileInterface(file_interface.interface());
 
-    // Load fonts
-    const lato_font_family_name = "Lato";
-    try rml.LoadFontFaceFromMemory(
-        @embedFile("data/Lato-Regular.ttf"),
-        lato_font_family_name,
-        .{},
-    );
-    try rml.LoadFontFaceFromMemory(
-        @embedFile("data/Lato-Light.ttf"),
-        lato_font_family_name,
-        .{},
-    );
+        // Setup RML
+        try rml.initialise();
+        errdefer rml.shutdown();
 
-    var window_width: c_int = undefined;
-    var window_height: c_int = undefined;
-    if (!sdl.SDL_GetWindowSize(window, &window_width, &window_height)) {
-        log.err("failed to get window size: {s}", .{sdl.SDL_GetError()});
-        return error.SdlError;
+        // Load fonts
+        const lato_font_family_name = "Lato";
+        try rml.loadFontFaceFromMemory(
+            @embedFile("data/Lato-Regular.ttf"),
+            lato_font_family_name,
+            .{},
+        );
+        try rml.loadFontFaceFromMemory(
+            @embedFile("data/Lato-Light.ttf"),
+            lato_font_family_name,
+            .{},
+        );
+
+        // Setup the RmlUi Context: https://mikke89.github.io/RmlUiDoc/pages/cpp_manual/contexts.html
+        var window_width: c_int = undefined;
+        var window_height: c_int = undefined;
+        if (!sdl.SDL_GetWindowSize(window, &window_width, &window_height)) {
+            log.err("failed to get window size: {s}", .{sdl.SDL_GetError()});
+            return error.SdlError;
+        }
+        const context = try rml.createContext("main", window_width, window_height, .default);
+        errdefer context.destroy();
+        context.setDensityIndependentPixelRatio(sdl.SDL_GetWindowDisplayScale(window));
+
+        try rmldebug.initialise(context);
+
+        break :rmluiblk RmlAppState{
+            .system_interface = system_interface,
+            .render_interface = render_interface,
+            .file_interface = file_interface,
+            .context = context,
+        };
+    };
+    defer {
+        rmlui.context.destroy();
+        rml.shutdown();
+        rmlui.system_interface.destroy();
+        rmlui.render_interface.destroy();
+        rmlui.file_interface.deinit(allocator);
     }
-    const context = try rml.createContext("main", window_width, window_height, .default);
-    context.setDensityIndependentPixelRatio(sdl.SDL_GetWindowDisplayScale(window));
-
-    try rml.debugger.initialise(context);
 
     // Example of data binding setup, based on the tutorial here:
     // https://mikke89.github.io/RmlUiDoc/pages/data_bindings/examples.html
@@ -95,7 +120,7 @@ pub fn main() !void {
     };
     var my_data: MyData = .{};
     const my_model = modelblk: {
-        var dmc = try context.createDataModel("my_model", null);
+        var dmc = try rmlui.context.createDataModel("my_model", .default);
         try dmc.bind("title", &my_data.title);
         try dmc.bind("animal", &my_data.animal);
         try dmc.bind("readonly_text", &my_data.readonly_text);
@@ -104,29 +129,38 @@ pub fn main() !void {
         break :modelblk dmc.getModelHandle();
     };
 
-    const rmlui_template_name = "data/main.rml";
-    const document = try context.loadDocumentFromMemory(@embedFile(rmlui_template_name), rmlui_template_name);
+    const document = try rmlui.context.loadDocument(rmlui_template_name);
     document.show(.default);
 
     var has_quit = false;
     while (!has_quit) {
         // Event polling
         {
+            const power_save = true;
+
+            // If you're building a UI application, you can use SDL_WaitEventTimeout to utilize
+            // less CPU usage. This logic was taken from the RmlUi renderer code here:
+            // https://github.com/mikke89/RmlUi/blob/8063b13f068747496fa596dfa77997ecea4e5f0e/Backends/RmlUi_Backend_SDL_SDLrenderer.cpp#L167
             var sdl_event: sdl.SDL_Event = undefined;
-            while (sdl.SDL_PollEvent(&sdl_event)) {
+            var has_event = if (power_save)
+                sdl.SDL_WaitEventTimeout(&sdl_event, @intFromFloat(@min(rmlui.context.getNextUpdateDelay(), 10) * 1000))
+            else
+                sdl.SDL_PollEvent(&sdl_event);
+            while (has_event) : (has_event = sdl.SDL_PollEvent(&sdl_event)) {
+                // Press+Release 'CTRL+D' to open and close the debugger UI
                 if (sdl_event.type == sdl.SDL_EVENT_KEY_UP and
                     (sdl_event.key.mod == sdl.SDL_KMOD_LCTRL or sdl_event.key.mod == sdl.SDL_KMOD_RCTRL) and
                     sdl_event.key.key == sdl.SDLK_D)
                 {
-                    if (!rml.debugger.isVisible()) {
+                    if (!rmldebug.isVisible()) {
                         log.info("RmlUi debugger opened", .{});
-                        rml.debugger.setVisible(true);
+                        rmldebug.setVisible(true);
                     } else {
                         log.info("RmlUi debugger closed", .{});
-                        rml.debugger.setVisible(false);
+                        rmldebug.setVisible(false);
                     }
                 }
-                if (!rml.sdl.inputEventHandler(context, @ptrCast(window), @ptrCast(&sdl_event))) {
+                if (!rmlsdl.inputEventHandler(rmlui.context, @ptrCast(window), @ptrCast(&sdl_event))) {
                     // If false, then RmlUi consumed/processed that event, don't process it ourselves
                     continue;
                 }
@@ -154,7 +188,7 @@ pub fn main() !void {
 
             // Update RmlUi context
             // https://github.com/mikke89/RmlUi/blob/801b23945d36e7368c8f3df4653bee1b513c71d5/Samples/tutorial/template/src/main.cpp#L67
-            _ = context.update();
+            _ = rmlui.context.update();
         }
 
         // Draw
@@ -164,9 +198,9 @@ pub fn main() !void {
 
             // Render RmlUi context
             // https://github.com/mikke89/RmlUi/blob/801b23945d36e7368c8f3df4653bee1b513c71d5/Samples/tutorial/template/src/main.cpp#L69C12-L69C22
-            render_interface.beginFrame();
-            _ = context.render();
-            render_interface.endFrame();
+            rmlui.render_interface.beginFrame();
+            _ = rmlui.context.render();
+            rmlui.render_interface.endFrame();
 
             if (!sdl.SDL_RenderPresent(renderer)) {
                 log.err("render present failed: {s}", .{sdl.SDL_GetError()});

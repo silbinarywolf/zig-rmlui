@@ -41,6 +41,8 @@ An example of what the setup and application loop looks like when consuming this
 // This is an overly simplified example to give you the gist
 // of how this library works
 const rml = @import("rml");
+const rmldebug = @import("rmldebug");
+const rmlsdl = @import("rmlsdl");
 
 pub fn main() !void {
     // Setup platform-specific interfaces (ie. SDL3)
@@ -52,7 +54,12 @@ pub fn main() !void {
     defer rml.shutdown();
 
     const context = try rml.createContext("main", 1280, 720, .default);
-    try rml.debugger.initialise(context);
+    defer context.destroy();
+
+    try rmldebug.initialise(context);
+
+    const lato_font_family_name = "Lato";
+    try rml.loadFontFaceFromMemory(@embedFile("data/Lato-Regular.ttf"), lato_font_family_name, .{});
 
     // Example of data binding setup, based on the tutorial here:
     // https://mikke89.github.io/RmlUiDoc/pages/data_bindings/examples.html
@@ -66,7 +73,7 @@ pub fn main() !void {
     };
     var my_data: MyData = .{};
     const my_model = modelblk: {
-        var dmc = try context.createDataModel("my_model", null);
+        var dmc = try context.createDataModel("my_model", .default);
         try dmc.bind("title", &my_data.title);
         try dmc.bind("animal", &my_data.animal);
         try dmc.bind("readonly_text", &my_data.readonly_text);
@@ -82,7 +89,7 @@ pub fn main() !void {
     while (!has_quit) {
         // Event Loop
         while (SDL_PollEvent(...)) {
-             if (!rml.sdl.inputEventHandler(context, window, &sdl_event)) {
+             if (!rmlsdl.inputEventHandler(context, window, &sdl_event)) {
                 // If false, then RmlUi consumed/processed that event, don't process it ourselves
                 continue;
             }

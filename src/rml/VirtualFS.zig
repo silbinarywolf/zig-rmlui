@@ -196,3 +196,9 @@ const EmbedFile = struct {
 };
 
 const VirtualFS = @This();
+
+const testing = @import("std").testing;
+
+test {
+    testing.refAllDecls(VirtualFS);
+}

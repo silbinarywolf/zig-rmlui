@@ -56,11 +56,9 @@ pub fn build(b: *std.Build) !void {
             // Add directory containing "SDL3/SDL.h" so we can compile the platform/rendering backends
             .sdl_include_path = sdl_include_path,
         });
-        app.linkLibrary(rmlui_dep.artifact("crmlui"));
-        app.linkLibrary(rmlui_dep.artifact("rmlui_core"));
-        app.linkLibrary(rmlui_dep.artifact("rmlui_debugger"));
-        app.linkLibrary(rmlui_dep.artifact("rmlui_backend_SDL_SDLrenderer"));
         app.addImport("rml", rmlui_dep.module("rml"));
+        app.addImport("rmldebug", rmlui_dep.module("rmldebug"));
+        app.addImport("rmlsdl", rmlui_dep.module("rmlsdl"));
     }
 
     const exe = b.addExecutable(.{

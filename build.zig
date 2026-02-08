@@ -40,7 +40,11 @@ pub fn build(b: *std.Build) !void {
     // -DRMLUI_CUSTOM_RTTI=ON -DCMAKE_CXX_FLAGS="-fno-exceptions -fno-rtti"
     const disable_rtti_and_exceptions = false;
 
-    const cpp_flags: []const []const u8 = if (disable_rtti_and_exceptions)
+    const cpp_flags: []const []const u8 = [_][]const u8{
+        // "In addition, a C++17 compatible compiler is required." - As of 2026-02-08, previously it was 2014
+        // https://github.com/mikke89/RmlUi?tab=readme-ov-file#dependencies
+        "-std=c++17",
+    } ++ if (disable_rtti_and_exceptions)
         &[_][]const u8{ "-fno-exceptions", "-fno-rtti" }
     else
         &[0][]const u8{};
@@ -74,8 +78,6 @@ pub fn build(b: *std.Build) !void {
                 .flags = cpp_flags,
             });
             mod.addIncludePath(freetype_include_path);
-        } else {
-            mod.addCMacro("RMLUI_FONT_ENGINE_FREETYPE", "0");
         }
 
         const rmlui_core_lib = b.addLibrary(.{
@@ -87,8 +89,8 @@ pub fn build(b: *std.Build) !void {
         break :libblk rmlui_core_lib;
     };
 
-    // Add rmlui_debugger module
-    {
+    // Add rmlui_debugger library
+    const rmlui_debugger_lib = libblk: {
         const mod = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -113,115 +115,145 @@ pub fn build(b: *std.Build) !void {
             .root_module = mod,
         });
         b.installArtifact(rmlui_debugger_lib);
-    }
-
-    // Add SDL3 backend (rmlui_backend_SDL_SDLrenderer)
-    if (optional_sdl_include_path) |sdl_include_path| {
-        const sdl_renderer_mod = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libcpp = true,
-        });
-        if (disable_rtti_and_exceptions) {
-            sdl_renderer_mod.addCMacro("RMLUI_CUSTOM_RTTI", "ON");
-        }
-        sdl_renderer_mod.addCMacro("RMLUI_SDL_VERSION_MAJOR", rmlui_sdl_version_major_macro);
-        sdl_renderer_mod.addCSourceFiles(.{
-            .root = rmlui_path.path(b, "Backends"),
-            .files = rmlui_sdl_renderer_backend,
-            .flags = cpp_flags,
-        });
-        sdl_renderer_mod.addIncludePath(rmlui_include_path);
-        sdl_renderer_mod.addIncludePath(sdl_include_path);
-
-        if (optional_sdl_image_include_path) |sdl_image_include_path| {
-            // Add SDL_image include path
-            // - SDL2: #include <SDL_image.h>
-            // - SDL3: #include <SDL3_image/SDL_image.h>
-            sdl_renderer_mod.addIncludePath(sdl_image_include_path);
-        } else {
-            switch (sdl_major_version) {
-                2 => @panic("must add SDL_image include path for SDL2"),
-                3 => {
-                    // If SDL3_image is not provided then support PNG loading only using SDL 3.4.X+
-                    const sdl3_image_path = b.path("src/sdl3_image_patch");
-                    sdl_renderer_mod.addIncludePath(sdl3_image_path);
-                },
-                else => unreachable,
-            }
-        }
-
-        const sdl_renderer_lib = b.addLibrary(.{
-            .name = "rmlui_backend_SDL_SDLrenderer",
-            .linkage = .static,
-            .root_module = sdl_renderer_mod,
-        });
-        b.installArtifact(sdl_renderer_lib);
-    }
-
-    // Add C-RmlUi binding library and link to rmlui_core
-    {
-        const mod = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libcpp = true,
-        });
-        mod.addCMacro("CRMLUI_IMPL_API", "extern \"C\"");
-        if (disable_rtti_and_exceptions) {
-            mod.addCMacro("RMLUI_CUSTOM_RTTI", "ON");
-        }
-        if (optional_freetype_include_path) |_| {
-            mod.addCMacro("RMLUI_FONT_ENGINE_FREETYPE", "1");
-        }
-        if (optional_sdl_include_path) |sdl_include_path| {
-            mod.addCMacro("RMLUI_SDL_VERSION_MAJOR", "3");
-            mod.addIncludePath(sdl_include_path);
-        }
-        mod.addCSourceFiles(.{
-            .root = b.path("crmlui"),
-            .files = &.{"crmlui.cpp"},
-            .flags = cpp_flags,
-        });
-        mod.addIncludePath(rmlui_include_path);
-        mod.addIncludePath(rmlui_backend_include_path);
-
-        const crmlui_lib = b.addLibrary(.{
-            .name = "crmlui",
-            .linkage = .static,
-            .root_module = mod,
-        });
-        b.installArtifact(crmlui_lib);
-
-        _ = rmlui_core_lib;
-        // rmlui_core_lib.linkLibrary(crmlui_lib);
-    }
+        break :libblk rmlui_debugger_lib;
+    };
 
     // Add crmlui module (C-bindings)
     const crmlui_mod = modblk: {
+        // Add C-RmlUi binding library
+        const crmlui_lib = libblk: {
+            const mod = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libcpp = true,
+            });
+            mod.addCMacro("CRMLUI_IMPL_API", "extern \"C\"");
+            if (disable_rtti_and_exceptions) {
+                mod.addCMacro("RMLUI_CUSTOM_RTTI", "ON");
+            }
+            if (optional_sdl_include_path) |sdl_include_path| {
+                mod.addCMacro("RMLUI_SDL_VERSION_MAJOR", "3");
+                mod.addIncludePath(sdl_include_path);
+            }
+            mod.addCSourceFiles(.{
+                .root = b.path("crmlui"),
+                .files = &.{"crmlui.cpp"},
+                .flags = cpp_flags,
+            });
+            mod.addIncludePath(rmlui_include_path);
+            mod.addIncludePath(rmlui_backend_include_path);
+
+            mod.addCMacro("CRMLUI_HAS_CORE", "1");
+            mod.linkLibrary(rmlui_core_lib);
+
+            mod.addCMacro("CRMLUI_HAS_DEBUGGER", "1");
+            mod.linkLibrary(rmlui_debugger_lib);
+
+            const crmlui_lib = b.addLibrary(.{
+                .name = "crmlui",
+                .linkage = .static,
+                .root_module = mod,
+            });
+            b.installArtifact(crmlui_lib);
+            break :libblk crmlui_lib;
+        };
+
         var c_translate = b.addTranslateC(.{
             .target = target,
             .optimize = optimize,
             .root_source_file = b.path("crmlui/crmlui.h"),
         });
+        c_translate.defineCMacro("CRMLUI_HAS_CORE", "1");
+        c_translate.defineCMacro("CRMLUI_HAS_DEBUGGER", "1");
         c_translate.defineCMacro("CRMLUI_DEFINE_ENUMS_AND_STRUCTS", "1");
         if (optional_sdl_include_path) |_| {
             c_translate.defineCMacro("CRMLUI_HAS_SDL_BACKEND", "1");
         }
         c_translate.addIncludePath(b.path("crmlui/crmlui.h"));
-        break :modblk b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .root_source_file = c_translate.getOutput(),
-        });
+        const crmlui_mod = c_translate.createModule();
+        crmlui_mod.linkLibrary(crmlui_lib);
+        break :modblk crmlui_mod;
     };
 
     // Add rml module
-    const rml_mod = b.addModule("rml", .{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("src/root.zig"),
-    });
-    rml_mod.addImport("crml", crmlui_mod);
+    const rml_mod = modblk: {
+        const rml_mod = b.addModule("rml", .{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/rml/root.zig"),
+        });
+        rml_mod.addImport("crml", crmlui_mod);
+        rml_mod.linkLibrary(rmlui_core_lib);
+        break :modblk rml_mod;
+    };
+
+    _ = modblk: {
+        const rml_debug_mod = b.addModule("rmldebug", .{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/rmldebug/root.zig"),
+        });
+        rml_debug_mod.addImport("rml", rml_mod);
+        rml_debug_mod.addImport("crml", crmlui_mod);
+        rml_debug_mod.linkLibrary(rmlui_debugger_lib);
+        break :modblk rml_debug_mod;
+    };
+
+    // Add SDL3 backend (rmlui_backend_SDL_SDLrenderer)
+    {
+        const rmlsdl_mod = b.addModule("rmlsdl", .{
+            .root_source_file = b.path("src/rmlsdl/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        rmlsdl_mod.addImport("rml", rml_mod);
+        rmlsdl_mod.addImport("crml", crmlui_mod);
+
+        if (optional_sdl_include_path) |sdl_include_path| {
+            const sdl_renderer_lib_mod = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libcpp = true,
+            });
+            if (disable_rtti_and_exceptions) {
+                sdl_renderer_lib_mod.addCMacro("RMLUI_CUSTOM_RTTI", "ON");
+            }
+            sdl_renderer_lib_mod.addCMacro("RMLUI_SDL_VERSION_MAJOR", rmlui_sdl_version_major_macro);
+            sdl_renderer_lib_mod.addCSourceFiles(.{
+                .root = rmlui_path.path(b, "Backends"),
+                .files = rmlui_sdl_renderer_backend,
+                .flags = cpp_flags,
+            });
+            sdl_renderer_lib_mod.addIncludePath(rmlui_include_path);
+            sdl_renderer_lib_mod.addIncludePath(sdl_include_path);
+
+            if (optional_sdl_image_include_path) |sdl_image_include_path| {
+                // Add SDL_image include path
+                // - SDL2: #include <SDL_image.h>
+                // - SDL3: #include <SDL3_image/SDL_image.h>
+                sdl_renderer_lib_mod.addIncludePath(sdl_image_include_path);
+            } else {
+                switch (sdl_major_version) {
+                    2 => @panic("must add SDL_image include path for SDL2"),
+                    3 => {
+                        // If SDL3_image is not provided then support PNG loading only using SDL 3.4.X+
+                        const sdl3_image_path = b.path("src/sdl3_image_patch");
+                        sdl_renderer_lib_mod.addIncludePath(sdl3_image_path);
+                    },
+                    else => unreachable,
+                }
+            }
+
+            const sdl_renderer_lib = b.addLibrary(.{
+                .name = "rmlui_backend_SDL_SDLrenderer",
+                .linkage = .static,
+                .root_module = sdl_renderer_lib_mod,
+            });
+            b.installArtifact(sdl_renderer_lib);
+
+            rmlsdl_mod.linkLibrary(sdl_renderer_lib);
+        }
+    }
 
     // NOTE(jae): 2026-01-25
     // Other RmlUi libraries
@@ -238,11 +270,7 @@ pub fn build(b: *std.Build) !void {
     const test_filters: []const []const u8 = b.option([]const []const u8, "test-filter", "Skip tests that do not match any filter") orelse &[0][]const u8{};
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/testing.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = rml_mod,
         .filters = test_filters,
     })).step);
 }
@@ -359,21 +387,15 @@ const rmlui_src_files = [_][]const u8{
     "Core/FilterBlur.cpp",
     "Core/Filter.cpp",
     "Core/FilterDropShadow.cpp",
+    //
     "Core/FontEffectBlur.cpp",
     "Core/FontEffect.cpp",
     "Core/FontEffectGlow.cpp",
     "Core/FontEffectInstancer.cpp",
     "Core/FontEffectOutline.cpp",
     "Core/FontEffectShadow.cpp",
-    //
-    "Core/FontEngineDefault/FontEngineInterfaceDefault.cpp",
-    "Core/FontEngineDefault/FontFace.cpp",
-    "Core/FontEngineDefault/FontFaceHandleDefault.cpp",
-    "Core/FontEngineDefault/FontFaceLayer.cpp",
-    "Core/FontEngineDefault/FontFamily.cpp",
-    "Core/FontEngineDefault/FontProvider.cpp",
-    "Core/FontEngineDefault/FreeTypeInterface.cpp",
     "Core/FontEngineInterface.cpp",
+    //
     "Core/GeometryBackgroundBorder.cpp",
     "Core/GeometryBoxShadow.cpp",
     "Core/Geometry.cpp",

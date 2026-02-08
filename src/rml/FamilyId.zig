@@ -63,6 +63,10 @@ const OptionalFamilyId = enum(crml.RmlFamilyId) {
 
 const testing = @import("std").testing;
 
+test {
+    testing.refAllDecls(@This());
+}
+
 test "test that getTypeId generates a unique id per type" {
     const getTypeId = FamilyId.getTypeId;
     try testing.expectEqual(getTypeId(u8), getTypeId(u8));

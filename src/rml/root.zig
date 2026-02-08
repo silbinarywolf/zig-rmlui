@@ -1,19 +1,13 @@
-//! RmlUi Core functions
+//! RmlUi Core Library functions
 
+const crml = @import("crml");
+
+const assert = @import("std").debug.assert;
 const mem = @import("std").mem;
 const Writer = @import("std").Io.Writer;
 const panic = @import("std").debug.panic;
 const comptimePrint = @import("std").fmt.comptimePrint;
 const log = @import("std").log.scoped(.rmlui);
-
-/// Allow accessing of the C-API
-pub const crml = @import("crml");
-
-/// RmlUi Debugger functions
-pub const debugger = @import("debugger.zig");
-
-/// SDL Platform/Rendering Backend
-pub const sdl = @import("sdl.zig");
 
 pub const ZigFileInterface = @import("ZigFileInterface.zig");
 pub const FamilyId = @import("FamilyId.zig").FamilyId;
@@ -36,8 +30,6 @@ pub const BindError = error{
     RmlTypeNotRegistered,
 } || internal.CreateDefinitionError;
 
-// TODO: Write Zig bindings over the C-bindings
-
 /// Initialises RmlUi.
 pub inline fn initialise() Error!void {
     if (!crml.rmlInitialise()) return error.RmlInitialiseFailed;
@@ -48,20 +40,37 @@ pub inline fn shutdown() void {
     return crml.rmlShutdown();
 }
 
-pub const KeyModifier = enum(u32) {
-    none = 0,
-    _,
-    // TODO: Setup flags for key modifier state
-    // if (x11_state & ShiftMask)
-    // key_modifier_state |= Rml::Input::KM_SHIFT;
-    // if (x11_state & LockMask)
-    // key_modifier_state |= Rml::Input::KM_CAPSLOCK;
-    // if (x11_state & ControlMask)
-    // key_modifier_state |= Rml::Input::KM_CTRL;
-    // if (x11_state & Mod5Mask)
-    // key_modifier_state |= Rml::Input::KM_ALT;
-    // if (x11_state & Mod2Mask)
-    // key_modifier_state |= Rml::Input::KM_NUMLOCK;
+pub const KeyModifier = packed struct(u8) {
+    /// set if at least one Ctrl key is depressed.
+    ctrl: bool,
+    /// set if at least one Shift key is depressed.
+    shift: bool,
+    /// set if at least one Shift key is depressed.
+    alt: bool,
+    /// set if at least one Meta key (the command key) is depressed.
+    meta: bool,
+    /// set if caps lock is enabled.
+    capslock: bool,
+    /// set if num lock is enabled.
+    numlock: bool,
+    /// set if scroll lock is enabled.
+    scrolllock: bool,
+    _padding: bool = false,
+
+    pub const none: KeyModifier = .{
+        .ctrl = false,
+        .shift = false,
+        .alt = false,
+        .meta = false,
+        .capslock = false,
+        .numlock = false,
+        .scrolllock = false,
+    };
+
+    /// convert to C-API
+    fn c(key_modifier: KeyModifier) u8 {
+        return @bitCast(key_modifier);
+    }
 };
 
 pub const createContext = Context.create;
@@ -101,6 +110,16 @@ pub const Context = opaque {
         return @ptrCast(r);
     }
 
+    /// Destroys the current context
+    pub inline fn destroy(context: *Context) void {
+        // If context no longer exists on RmlUi, ie. rml.shutdown() was already called
+        // then return and do nothing on destroy
+        _ = context.getIndexFromRmlUi() orelse return;
+
+        const name = context.getName();
+        assert(crml.rmlRemoveContext(name.ptr, @intCast(name.len)));
+    }
+
     /// Updates all elements in the context's documents.
     /// This must be called before Context::Render, but after any elements have been changed, added, or removed.
     pub inline fn update(context: *Context) bool {
@@ -112,9 +131,40 @@ pub const Context = opaque {
         return crml.rmlContext_Render(context.c());
     }
 
+    /// Get the max delay until Update() and Render() should get called again. An application can choose to only call
+    /// update and render once the time has elapsed, but there's no harm in doing so more often. The returned value can
+    /// be infinity, in which case Update() should be invoked after user input was received. A value of 0 means "render
+    /// as fast as possible", for example if an animation is playing.
+    ///
+    /// See: https://mikke89.github.io/RmlUiDoc/pages/cpp_manual/contexts.html#on-demand-rendering
+    ///
+    /// @return Time until the next update is expected.
+    pub inline fn getNextUpdateDelay(context: *const Context) f64 {
+        return crml.rmlContext_GetNextUpdateDelay(@ptrCast(context));
+    }
+
+    /// Get the name of the context
+    pub inline fn getName(context: *Context) [:0]const u8 {
+        const name = crml.rmlContext_GetName(context.c());
+        return mem.span(name);
+    }
+
     /// Changes the ratio of the 'dp' unit to the 'px' unit.
     pub inline fn setDensityIndependentPixelRatio(context: *Context, dp_ratio: f32) void {
         return crml.rmlContext_SetDensityIndependentPixelRatio(context.c(), dp_ratio);
+    }
+
+    /// Load a document into the context.
+    /// @param[in] document_path The path to the document to load. The path is passed directly to the file interface which is used to load the file.
+    /// The default file interface accepts both absolute paths and paths relative to the working directory.
+    /// @return The loaded document, or nullptr if no document was loaded.
+    pub inline fn loadDocument(context: *Context, filepath: []const u8) error{RmlLoadDocumentFailed}!*ElementDocument {
+        const el = crml.rmlContext_LoadDocument(
+            context.c(),
+            filepath[0..].ptr,
+            filepath.len,
+        ) orelse return error.RmlLoadDocumentFailed;
+        return @ptrCast(el);
     }
 
     /// Load a document into the context.
@@ -133,13 +183,21 @@ pub const Context = opaque {
         return @ptrCast(el);
     }
 
-    pub inline fn createDataModel(context: *Context, name: []const u8, data_type_register: ?*DataTypeRegister) error{RmlCreateDataModelFailed}!DataModelConstructor {
+    pub const CreateDataModelOptions = struct {
+        data_type_register: ?*DataTypeRegister,
+
+        pub const default: CreateDataModelOptions = .{
+            .data_type_register = null,
+        };
+    };
+
+    pub inline fn createDataModel(context: *Context, name: []const u8, options: CreateDataModelOptions) error{RmlCreateDataModelFailed}!DataModelConstructor {
         var dmc_result: crml.RmlDataModelConstructor = undefined;
         crml.rmlContext_CreateDataModel(
             context.c(),
             name.ptr,
             name.len,
-            if (data_type_register) |dtr| dtr.c() else null,
+            if (options.data_type_register) |dtr| dtr.c() else null,
             &dmc_result,
         );
         return DataModelConstructor{ .impl = dmc_result };
@@ -147,12 +205,24 @@ pub const Context = opaque {
 
     /// True if the mouse is not interacting with any elements in the context (see 'IsMouseInteracting'), otherwise false.
     pub inline fn processMouseMove(context: *Context, x: i32, y: i32, key_modifier_state: KeyModifier) bool {
-        return crml.rmlContext_ProcessMouseMove(context.c(), x, y, @intFromEnum(key_modifier_state));
+        return crml.rmlContext_ProcessMouseMove(context.c(), x, y, key_modifier_state.c());
     }
 
     /// True if the event was not consumed (ie, was prevented from propagating by an element), false if it was.
     pub inline fn processMouseWheel(context: *Context, mouse_delta_x: f32, mouse_delta_y: f32, key_modifier_state: KeyModifier) bool {
-        return crml.rmlContext_ProcessMouseWheel(context.c(), mouse_delta_x, mouse_delta_y, @intFromEnum(key_modifier_state));
+        return crml.rmlContext_ProcessMouseWheel(context.c(), mouse_delta_x, mouse_delta_y, key_modifier_state.c());
+    }
+
+    /// Get the index of the context, if this returns null than RmlUi has freed the context already
+    fn getIndexFromRmlUi(context: *const Context) ?u31 {
+        const contexts_length = crml.rmlGetNumContexts();
+        var context_index: u31 = 0;
+        while (context_index < contexts_length) : (context_index += 1) {
+            if (@intFromPtr(crml.rmlGetContext(context_index)) == @intFromPtr(context)) {
+                return context_index;
+            }
+        }
+        return null;
     }
 
     /// cast to C-API type
@@ -224,6 +294,18 @@ pub const Element = opaque {
     }
 };
 
+pub fn StructHandle(comptime T: type) type {
+    return struct {
+        impl: crml.RmlStructHandle,
+
+        const Type: type = T;
+
+        pub fn registerMember() bool {
+            return false;
+        }
+    };
+}
+
 pub const DataModelConstructor = struct {
     impl: crml.RmlDataModelConstructor,
 
@@ -239,6 +321,8 @@ pub const DataModelConstructor = struct {
         if (!dmc.bindVariable(name, DataVariable.init(definition, @ptrCast(ptr))))
             return error.RmlBindFailed;
     }
+
+    // pub fn registerStruct(comptime T: type) void {}
 
     /// Bind a user-declared DataVariable.
     /// For advanced use cases, such as binding variables to a custom 'VariableDefinition'.
@@ -595,8 +679,27 @@ pub const FontWeight = enum(u10) {
     bold = crml.RmlFontWeight_Bold,
 };
 
-/// LoadFontFaceOptions uses the same defaults C++
+/// Uses the same defaults as C++
 pub const LoadFontFaceOptions = struct {
+    weight: FontWeight = .auto,
+    /// Set to true to use this font face for unknown characters in other font faces.
+    fallback_face: bool = false,
+    /// The index of the font face within a font collection
+    face_index: u16 = 0,
+};
+
+pub inline fn loadFontFace(filepath: []const u8, options: LoadFontFaceOptions) error{RmlLoadFontFaceFailed}!void {
+    if (!crml.rmlLoadFontFace(
+        filepath[0..].ptr,
+        filepath.len,
+        @intFromEnum(options.weight),
+        options.fallback_face,
+        options.face_index,
+    )) return error.RmlLoadFontFaceFailed;
+}
+
+/// Uses the same defaults as C++
+pub const LoadFontFaceFromMemoryOptions = struct {
     style: FontStyle = .normal,
     weight: FontWeight = .auto,
     /// Set to true to use this font face for unknown characters in other font faces.
@@ -605,7 +708,7 @@ pub const LoadFontFaceOptions = struct {
     face_index: u16 = 0,
 };
 
-pub inline fn LoadFontFaceFromMemory(data: []const u8, font_family_name: []const u8, options: LoadFontFaceOptions) error{RmlLoadFontFaceFailed}!void {
+pub inline fn loadFontFaceFromMemory(data: []const u8, font_family_name: []const u8, options: LoadFontFaceFromMemoryOptions) error{RmlLoadFontFaceFailed}!void {
     if (!crml.rmlLoadFontFaceFromMemory(
         data[0..].ptr,
         data.len,
@@ -649,4 +752,10 @@ pub inline fn setRenderInterface(render_interface: *RenderInterface) void {
 /// @lifetime The interface must be kept alive until after the call to Rml::Shutdown.
 pub inline fn setFileInterface(file_interface: *FileInterface) void {
     return crml.rmlSetFileInterface(@ptrCast(file_interface));
+}
+
+const testing = @import("std").testing;
+
+test {
+    testing.refAllDecls(@This());
 }

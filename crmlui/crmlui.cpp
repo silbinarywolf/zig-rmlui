@@ -16,7 +16,10 @@
 #include "RmlUi_Platform_SDL.h"
 #include "RmlUi_Renderer_SDL.h"
 
-#define CRMLUI_HAS_SDL_BACKEND
+#ifndef CRMLUI_HAS_SDL_BACKEND
+#define CRMLUI_HAS_SDL_BACKEND 1
+#endif
+
 #endif
 
 #define CRMLUI_ASSERT RMLUI_ASSERT
@@ -57,6 +60,8 @@ template<typename T> void CRMLUI_DELETE(T* p)   { if (p) { delete(p); } }
 
 #include "crmlui.h"
 
+#if CRMLUI_HAS_CORE
+
 CRMLUI_API void rmlSetSystemInterface(RmlSystemInterface* _system_interface)
 {
     return Rml::SetSystemInterface(_system_interface);
@@ -82,9 +87,34 @@ CRMLUI_API void rmlSetFileInterface(RmlFileInterface* file_interface)
 	return Rml::SetFileInterface(file_interface);
 }
 
+CRMLUI_API RmlContext* rmlGetContext(int index)
+{
+	return Rml::GetContext(index);
+}
+
+CRMLUI_API int rmlGetNumContexts()
+{
+	return Rml::GetNumContexts();
+}
+
 CRMLUI_API RmlContext* rmlCreateContext(const char* name_ptr, unsigned int name_len, int width, int height, RmlRenderInterface* render_interface, RmlTextInputHandler* text_input_handler)
 {
     return Rml::CreateContext(Rml::String{name_ptr, name_len}, Rml::Vector2i(width, height), render_interface, text_input_handler);
+}
+
+CRMLUI_API bool rmlRemoveContext(const char* name_ptr, unsigned int name_len)
+{
+	return Rml::RemoveContext(Rml::String{name_ptr, name_len});
+}
+
+CRMLUI_API RmlElementDocument* rmlContext_LoadDocument(RmlContext* context, const char* filename_ptr, unsigned int filename_len)
+{
+	return context->LoadDocument(Rml::String{filename_ptr, filename_len});
+}
+
+CRMLUI_API const char* rmlContext_GetName(RmlContext* context)
+{
+	return context->GetName().c_str();
 }
 
 CRMLUI_API RmlElementDocument* rmlContext_LoadDocumentFromMemory(RmlContext* context, const char* rml_data_ptr, size_t rml_data_len, const char* filename_ptr, unsigned int filename_len)
@@ -125,6 +155,10 @@ CRMLUI_API bool rmlContext_ProcessMouseMove(RmlContext* context, int x, int y, i
 	return context->ProcessMouseMove(x, y, key_modifier_state);
 }
 
+CRMLUI_API double rmlContext_GetNextUpdateDelay(const RmlContext* context) {
+	return context->GetNextUpdateDelay();
+}
+
 CRMLUI_API void rmlContext_CreateDataModel(RmlContext* context, const char* name_ptr, size_t name_len, RmlDataTypeRegister* data_type_register /* = null*/, RmlDataModelConstructor* dmc_result)
 {
 	CRMLUI_ASSERT(dmc_result);
@@ -143,27 +177,14 @@ CRMLUI_API void rmlElementDocument_ReloadStyleSheet(RmlElementDocument* document
 	return document->ReloadStyleSheet();
 }
 
+CRMLUI_API bool rmlLoadFontFace(const char* file_path_ptr, size_t file_path_len, RmlFontWeight weight /* = Style::FontWeight::Auto*/, bool fallback_face /* = false */, int face_index /*= 0*/)
+{
+	return Rml::LoadFontFace(Rml::String{file_path_ptr, file_path_len}, fallback_face, static_cast<Rml::Style::FontWeight>(weight), face_index);
+}
+
 CRMLUI_API bool rmlLoadFontFaceFromMemory(const unsigned char* data_ptr, size_t data_len, const char *font_family_ptr, uint16_t font_family_len, RmlFontStyle style, RmlFontWeight weight, bool fallback_face, int face_index)
 {   
     return Rml::LoadFontFace(Rml::Span<const Rml::byte>{data_ptr, data_len}, Rml::String{font_family_ptr, font_family_len}, static_cast<Rml::Style::FontStyle>(style), static_cast<Rml::Style::FontWeight>(weight), fallback_face, face_index);
-}
-
-/*
- * Handle Debugger
- */
-CRMLUI_API bool rmlDebuggerInitialise(RmlContext* context)
-{
-    return Rml::Debugger::Initialise(context);
-}
-
-CRMLUI_API void rmlDebuggerSetVisible(bool is_visible)
-{
-    return Rml::Debugger::SetVisible(is_visible);
-}
-
-CRMLUI_API bool rmlDebuggerIsVisible()
-{
-    return Rml::Debugger::IsVisible();
 }
 
 CRMLUI_API bool rmlDataModelConstructor_BindCustomDataVariable(RmlDataModelConstructor* dmc, const char* name_ptr, size_t name_len, RmlDataVariable data_variable)
@@ -344,10 +365,32 @@ CRMLUI_API RmlFileInterface* rmlFileInterface_new(const RmlFileInterfaceVTable* 
     return CRMLUI_NEW(CRmluiFileInterface)(file_interface_vtable);
 }
 
+#endif /* CRMLUI_HAS_CORE */
+
+/*
+ * Handle Debugger
+ */
+#if CRMLUI_HAS_DEBUGGER
+CRMLUI_API bool rmlDebuggerInitialise(RmlContext* context)
+{
+    return Rml::Debugger::Initialise(context);
+}
+
+CRMLUI_API void rmlDebuggerSetVisible(bool is_visible)
+{
+    return Rml::Debugger::SetVisible(is_visible);
+}
+
+CRMLUI_API bool rmlDebuggerIsVisible(void)
+{
+    return Rml::Debugger::IsVisible();
+}
+#endif /* CRMLUI_HAS_DEBUGGER */
+
 /*
  * Handle SDL platform or renderer backend
  */
-#ifdef CRMLUI_HAS_SDL_BACKEND
+#if CRMLUI_HAS_SDL_BACKEND
 
 CRMLUI_API SystemInterface_SDL* rmlSystemInterface_SDL_new()
 {
@@ -390,4 +433,4 @@ CRMLUI_API void rmlRenderInterface_SDL_EndFrame(RenderInterface_SDL* render_inte
 	return render_interface->EndFrame();
 }
 
-#endif
+#endif /* CRMLUI_HAS_SDL_BACKEND */

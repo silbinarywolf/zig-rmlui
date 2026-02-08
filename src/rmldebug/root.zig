@@ -1,10 +1,10 @@
 //! RmlUi Debugger functions
 
-const rmlui = @import("root.zig");
+const rml = @import("rml");
 const crml = @import("crml");
 
-const Context = rmlui.Context;
-const Error = rmlui.Error;
+const Context = rml.Context;
+const Error = rml.Error;
 
 /// Initialises the debug plugin. The debugger will be loaded into the given context.
 ///
